@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { PlotCard } from '@/components/game/PlotCard';
-import { plantCrop } from '@/server/actions/farm.actions';
+import { plantCrop, waterCrop, harvestCrop } from '@/server/actions/farm.actions';
 import { X, Sprout } from 'lucide-react';
 import type { Database } from '@/types/database.types';
 
@@ -17,23 +17,78 @@ interface FarmViewProps {
 }
 
 export function FarmView({ initialPlots, cropDefs, userSeeds }: FarmViewProps) {
+  // Quản lý state cục bộ để cập nhật UI phản hồi tức thì 0ms (Optimistic UI)
+  const [plots, setPlots] = useState<FarmPlot[]>(initialPlots);
   const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
   const [isPlanting, setIsPlanting] = useState(false);
 
   const cropDefMap = new Map(cropDefs.map((c) => [c.id, c]));
 
+  // 1. Gieo hạt tức thì
   const handlePlant = async (cropType: CropDef['id']) => {
     if (!selectedPlotId) return;
-    try {
-      setIsPlanting(true);
-      const res = await plantCrop(selectedPlotId, cropType);
-      if (!res.success) {
-        alert(res.error);
-      } else {
-        setSelectedPlotId(null);
-      }
-    } finally {
-      setIsPlanting(false);
+    const targetPlotId = selectedPlotId;
+    setSelectedPlotId(null);
+
+    // Cập nhật giao diện ngay lập tức trong 0ms
+    setPlots((prev) =>
+      prev.map((p) =>
+        p.id === targetPlotId
+          ? {
+              ...p,
+              crop_type: cropType,
+              planted_at: new Date().toISOString(),
+              is_watered: false,
+              is_fertilized: false,
+            }
+          : p
+      )
+    );
+
+    // Đồng bộ server ngầm phía sau
+    const res = await plantCrop(targetPlotId, cropType);
+    if (!res.success) {
+      alert(res.error);
+      // Rollback nếu server báo lỗi
+      setPlots(initialPlots);
+    }
+  };
+
+  // 2. Tưới nước phản hồi tức thì
+  const handleWater = async (plotId: string) => {
+    // Cập nhật giao diện ngay lập tức
+    setPlots((prev) =>
+      prev.map((p) => (p.id === plotId ? { ...p, is_watered: true } : p))
+    );
+
+    const res = await waterCrop(plotId);
+    if (!res.success) {
+      alert(res.error);
+      setPlots(initialPlots);
+    }
+  };
+
+  // 3. Thu hoạch phản hồi tức thì
+  const handleHarvest = async (plotId: string) => {
+    // Đưa ô đất về trống ngay lập tức
+    setPlots((prev) =>
+      prev.map((p) =>
+        p.id === plotId
+          ? {
+              ...p,
+              crop_type: null,
+              planted_at: null,
+              is_watered: false,
+              is_fertilized: false,
+            }
+          : p
+      )
+    );
+
+    const res = await harvestCrop(plotId);
+    if (!res.success) {
+      alert(res.error);
+      setPlots(initialPlots);
     }
   };
 
@@ -53,12 +108,14 @@ export function FarmView({ initialPlots, cropDefs, userSeeds }: FarmViewProps) {
 
       {/* Grid Ô Đất Farm Plots */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {initialPlots.map((plot) => (
+        {plots.map((plot) => (
           <PlotCard
             key={plot.id}
             plot={plot}
             cropDef={plot.crop_type ? cropDefMap.get(plot.crop_type) : undefined}
             onPlantClick={(plotId) => setSelectedPlotId(plotId)}
+            onWater={handleWater}
+            onHarvest={handleHarvest}
           />
         ))}
       </div>
@@ -73,7 +130,7 @@ export function FarmView({ initialPlots, cropDefs, userSeeds }: FarmViewProps) {
               </h3>
               <button
                 onClick={() => setSelectedPlotId(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -101,7 +158,7 @@ export function FarmView({ initialPlots, cropDefs, userSeeds }: FarmViewProps) {
                     <button
                       disabled={!hasSeed || isPlanting}
                       onClick={() => handlePlant(crop.id)}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 active:scale-95 text-white font-medium text-xs rounded-lg transition"
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 active:scale-95 text-white font-medium text-xs rounded-lg transition cursor-pointer"
                     >
                       {hasSeed ? 'Gieo' : 'Hết hạt'}
                     </button>

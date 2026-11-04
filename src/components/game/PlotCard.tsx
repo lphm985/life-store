@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { Droplets, Sparkles, CheckCircle2, Sprout } from 'lucide-react';
 import { formatTimeRemaining } from '@/lib/utils';
-import { waterCrop, harvestCrop } from '@/server/actions/farm.actions';
 import type { Database } from '@/types/database.types';
 
 type FarmPlot = Database['public']['Tables']['farm_plots']['Row'];
@@ -13,13 +12,14 @@ interface PlotCardProps {
   plot: FarmPlot;
   cropDef?: CropDef;
   onPlantClick: (plotId: string) => void;
+  onWater: (plotId: string) => Promise<void>;
+  onHarvest: (plotId: string) => Promise<void>;
 }
 
-export function PlotCard({ plot, cropDef, onPlantClick }: PlotCardProps) {
+export function PlotCard({ plot, cropDef, onPlantClick, onWater, onHarvest }: PlotCardProps) {
   const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 
-  // Tính toán thời gian còn lại theo thời gian thực phía Client
   useEffect(() => {
     if (!plot.crop_type || !plot.planted_at || !cropDef) {
       setSecondsRemaining(0);
@@ -43,23 +43,19 @@ export function PlotCard({ plot, cropDef, onPlantClick }: PlotCardProps) {
 
   const isReady = plot.crop_type && secondsRemaining === 0;
 
-  const handleWater = async () => {
+  const handleWaterClick = async () => {
     try {
       setLoading(true);
-      const res = await waterCrop(plot.id);
-      if (!res.success) alert(res.error);
+      await onWater(plot.id);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleHarvest = async () => {
+  const handleHarvestClick = async () => {
     try {
       setLoading(true);
-      const res = await harvestCrop(plot.id);
-      if (!res.success) {
-        alert(res.error);
-      }
+      await onHarvest(plot.id);
     } finally {
       setLoading(false);
     }
@@ -105,7 +101,7 @@ export function PlotCard({ plot, cropDef, onPlantClick }: PlotCardProps) {
         </div>
       </div>
 
-      {/* Hiển thị trung tâm (Icon & Trạng thái phát triển) */}
+      {/* Hiển thị trung tâm */}
       <div className="flex flex-col items-center my-2">
         <div className="text-3xl mb-1 animate-bounce">
           {isReady ? '🌾' : '🌱'}
@@ -115,27 +111,27 @@ export function PlotCard({ plot, cropDef, onPlantClick }: PlotCardProps) {
             <CheckCircle2 className="w-3.5 h-3.5" /> Chín muồi!
           </span>
         ) : (
-          <span className="text-xs font-medium text-amber-400">
+          <span className="text-xs font-medium text-amber-400 font-mono">
             {formatTimeRemaining(secondsRemaining)}
           </span>
         )}
       </div>
 
-      {/* Hành động: Tưới nước hoặc Thu hoạch */}
+      {/* Hành động */}
       <div>
         {isReady ? (
           <button
-            onClick={handleHarvest}
+            onClick={handleHarvestClick}
             disabled={loading}
-            className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-lg shadow-md transition disabled:opacity-50"
+            className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-lg shadow-md transition disabled:opacity-50 cursor-pointer"
           >
             {loading ? 'Đang thu hoạch...' : '🌾 Thu hoạch'}
           </button>
         ) : (
           <button
-            onClick={handleWater}
+            onClick={handleWaterClick}
             disabled={loading || plot.is_watered}
-            className={`w-full py-2 font-medium text-xs rounded-lg transition flex items-center justify-center gap-1.5 ${
+            className={`w-full py-2 font-medium text-xs rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer ${
               plot.is_watered
                 ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                 : 'bg-blue-600/80 hover:bg-blue-500 text-white active:scale-95'

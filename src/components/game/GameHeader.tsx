@@ -14,7 +14,7 @@ export function GameHeader({ profile }: GameHeaderProps) {
   const energyPercent = Math.min(100, Math.round((profile.energy / profile.max_energy) * 100));
 
   return (
-    <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur border-b border-slate-800 text-slate-100 px-4 py-3 shadow-md">
+    <header className="relative z-30 bg-slate-900 border-b border-slate-800 text-slate-100 px-4 py-3 shadow-md">
       <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4">
         {/* User Info & Level */}
         <div className="flex items-center space-x-3">
@@ -80,7 +80,7 @@ export function GameHeader({ profile }: GameHeaderProps) {
           <form action="/auth/signout" method="post">
             <button
               type="submit"
-              className="p-1.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition"
+              className="p-1.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer"
               title="Đăng xuất"
             >
               <LogOut className="w-4 h-4" />

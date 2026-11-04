@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Sprout, Utensils, Users, Store, Backpack } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -13,12 +14,7 @@ const NAV_ITEMS = [
 ];
 
 export function GameNavBar() {
-  const router = useRouter();
   const pathname = usePathname();
-
-  const handleNav = (href: string) => {
-    router.push(href);
-  };
 
   return (
     <>
@@ -30,10 +26,10 @@ export function GameNavBar() {
             const isActive = pathname.startsWith(item.href);
 
             return (
-              <button
-                type="button"
+              <Link
                 key={item.href}
-                onClick={() => handleNav(item.href)}
+                href={item.href}
+                prefetch={true}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer select-none whitespace-nowrap shrink-0 active:scale-95 ${
                   isActive
                     ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
@@ -42,7 +38,7 @@ export function GameNavBar() {
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                 <span>{item.label}</span>
-              </button>
+              </Link>
             );
           })}
         </div>
@@ -55,17 +51,17 @@ export function GameNavBar() {
           const isActive = pathname.startsWith(item.href);
 
           return (
-            <button
-              type="button"
+            <Link
               key={item.href}
-              onClick={() => handleNav(item.href)}
+              href={item.href}
+              prefetch={true}
               className={`flex flex-col items-center gap-1 text-[11px] p-1.5 rounded-lg transition cursor-pointer active:scale-95 ${
                 isActive ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Icon className="w-5 h-5" />
               <span>{item.label}</span>
-            </button>
+            </Link>
           );
         })}
       </nav>

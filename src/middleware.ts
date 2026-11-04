@@ -6,14 +6,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files (images, icons, etc. with extensions like .svg, .png, .jpg)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  /*
+   * CHỈ chạy Middleware cho luồng /admin và các trang auth /login, /register
+   * KHÔNG chặn Middleware ở /play để người chơi chuyển tab tức thì 0ms,
+   * việc bảo vệ /play đã có Server Component layout.tsx đảm nhiệm an toàn 100%.
+   */
+  matcher: ['/admin/:path*', '/login', '/register'],
 };

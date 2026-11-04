@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Store, ShoppingCart, Tag, Coins, ArrowRight, X, Package, CheckCircle2 } from 'lucide-react';
-import { buySeedFromShop, createMarketListing, cancelMarketListing, buyFromMarketplace } from '@/server/actions/market.actions';
+import { Store, ShoppingCart, Tag, Coins, ArrowRight, X, Package, CheckCircle2, DollarSign } from 'lucide-react';
+import { buySeedFromShop, sellItemToNpcShop, createMarketListing, cancelMarketListing, buyFromMarketplace } from '@/server/actions/market.actions';
 import type { Database } from '@/types/database.types';
 
 type CropDef = Database['public']['Tables']['crop_definitions']['Row'];
@@ -17,7 +17,7 @@ interface MarketViewProps {
 }
 
 export function MarketView({ cropDefs, listings, userInventory, currentUserId }: MarketViewProps) {
-  const [activeTab, setActiveTab] = useState<'npc_shop' | 'p2p_market' | 'my_listings'>('npc_shop');
+  const [activeTab, setActiveTab] = useState<'npc_shop' | 'npc_sell' | 'p2p_market' | 'my_listings'>('npc_shop');
   const [showSellModal, setShowSellModal] = useState(false);
   const [selectedSellItem, setSelectedSellItem] = useState<InventoryItem | null>(null);
   const [sellQty, setSellQty] = useState(1);
@@ -29,6 +29,21 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
     try {
       setLoading(true);
       const res = await buySeedFromShop(cropId, 1);
+      if (!res.success) {
+        alert(res.error);
+      } else {
+        alert(res.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Bán vật phẩm cho Shop NPC lấy Vàng ngay
+  const handleSellToNpc = async (item: InventoryItem, qty: number = 1) => {
+    try {
+      setLoading(true);
+      const res = await sellItemToNpcShop(item.item_id, qty);
       if (!res.success) {
         alert(res.error);
       } else {
@@ -69,8 +84,8 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
     }
   };
 
-  // Xác nhận đăng bán
-  const handleConfirmSell = async () => {
+  // Xác nhận đăng bán P2P
+  const handleConfirmSellP2P = async () => {
     if (!selectedSellItem) return;
     try {
       setLoading(true);
@@ -90,53 +105,78 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
   const activeP2PListings = listings.filter((l) => l.status === 'active' && l.seller_id !== currentUserId);
   const myListings = listings.filter((l) => l.seller_id === currentUserId && l.status === 'active');
 
+  // Tính giá bán ước tính cho NPC
+  const getEstimatedNpcPrice = (item: InventoryItem) => {
+    if (item.item_id.startsWith('crop_')) {
+      const crop = cropDefs.find((c) => `crop_${c.id}` === item.item_id);
+      return crop ? crop.sell_price : 15;
+    }
+    if (item.category === 'herb') return 25;
+    if (item.category === 'processed_food') return 40;
+    if (item.category === 'potion') return 60;
+    return 10;
+  };
+
   return (
     <div className="space-y-6">
       {/* Title & Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Store className="w-6 h-6 text-amber-400" /> Trung Tâm Thương Mại & Chợ P2P
+            <Store className="w-6 h-6 text-amber-400" /> Trung Tâm Thương Mại & Cửa Hàng
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Mua hạt giống khởi đầu từ NPC hoặc tự do buôn bán nông sản, dược liệu với người chơi khác.
+            Mua hạt giống, bán nông sản cho Cửa Hàng NPC hoặc giao dịch tự do trên Chợ P2P.
           </p>
         </div>
 
-        {/* Action: Nút Đăng Bán */}
+        {/* Nút Đăng Bán P2P */}
         <button
           onClick={() => setShowSellModal(true)}
-          className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg active:scale-95 transition flex items-center gap-1.5 self-start"
+          className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg active:scale-95 transition flex items-center gap-1.5 self-start cursor-pointer"
         >
-          <Tag className="w-4 h-4" /> Đăng Bán Vật Phẩm
+          <Tag className="w-4 h-4" /> Đăng Bán Chợ P2P
         </button>
       </div>
 
-      {/* Switcher 3 Tabs */}
-      <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+      {/* Switcher 4 Tabs */}
+      <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs flex-wrap">
         <button
           onClick={() => setActiveTab('npc_shop')}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition ${
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
             activeTab === 'npc_shop'
               ? 'bg-amber-600 text-white shadow-md'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <ShoppingCart className="w-4 h-4" /> Shop NPC (Hạt Giống)
+          <ShoppingCart className="w-4 h-4" /> Cửa Hàng NPC (Mua Hạt)
         </button>
+
+        <button
+          onClick={() => setActiveTab('npc_sell')}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
+            activeTab === 'npc_sell'
+              ? 'bg-emerald-600 text-white shadow-md'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <DollarSign className="w-4 h-4 text-emerald-300" /> Bán Đồ Cho NPC
+        </button>
+
         <button
           onClick={() => setActiveTab('p2p_market')}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition ${
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
             activeTab === 'p2p_market'
-              ? 'bg-emerald-600 text-white shadow-md'
+              ? 'bg-indigo-600 text-white shadow-md'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           <Store className="w-4 h-4" /> Chợ P2P ({activeP2PListings.length})
         </button>
+
         <button
           onClick={() => setActiveTab('my_listings')}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition ${
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
             activeTab === 'my_listings'
               ? 'bg-purple-600 text-white shadow-md'
               : 'text-slate-400 hover:text-slate-200'
@@ -146,7 +186,7 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
         </button>
       </div>
 
-      {/* TAB 1: SHOP NPC (HẠT GIỐNG) */}
+      {/* TAB 1: SHOP NPC (MUA HẠT GIỐNG) */}
       {activeTab === 'npc_shop' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {cropDefs.map((crop) => (
@@ -174,7 +214,7 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
               <button
                 disabled={loading}
                 onClick={() => handleBuySeed(crop.id)}
-                className="mt-4 w-full py-2 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5"
+                className="mt-4 w-full py-2 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <ShoppingCart className="w-4 h-4" /> Mua 1 Gói (-{crop.buy_price}🪙)
               </button>
@@ -183,7 +223,67 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
         </div>
       )}
 
-      {/* TAB 2: CHỢ P2P (MUA CỦA NGƯỜI CHƠI KHÁC) */}
+      {/* TAB 2: BÁN ĐỒ CHO SHOP NPC LẤY VÀNG NGAY */}
+      {activeTab === 'npc_sell' && (
+        <div className="space-y-4">
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300">
+            💡 Bán nhanh nông sản thu hoạch, thảo dược hoặc thức ăn trực tiếp cho Cửa Hàng để nhận Vàng ngay lập tức.
+          </div>
+
+          {userInventory.length === 0 ? (
+            <div className="text-center py-16 border-2 border-dashed border-slate-800 rounded-2xl bg-slate-900/30">
+              <p className="text-sm text-slate-400">Túi đồ của bạn đang trống! Hãy trồng trọt hoặc đi thám hiểm.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+              {userInventory.map((item) => {
+                const estPrice = getEstimatedNpcPrice(item);
+
+                return (
+                  <div
+                    key={item.id}
+                    className="p-4 bg-slate-900 border border-slate-800 rounded-xl flex flex-col justify-between shadow-md"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-2xl">{item.icon}</span>
+                        <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-bold">
+                          Có: x{item.quantity}
+                        </span>
+                      </div>
+
+                      <h4 className="font-semibold text-xs text-slate-200 mt-2 truncate">{item.item_name}</h4>
+                      <div className="text-[11px] text-amber-400 mt-1 font-medium">
+                        Giá thu mua: {estPrice} Vàng/cái
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-1.5">
+                      <button
+                        disabled={loading}
+                        onClick={() => handleSellToNpc(item, 1)}
+                        className="py-1.5 bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 text-[11px] font-semibold rounded-lg transition active:scale-95 cursor-pointer disabled:opacity-50"
+                      >
+                        Bán 1 (+{estPrice}🪙)
+                      </button>
+
+                      <button
+                        disabled={loading}
+                        onClick={() => handleSellToNpc(item, item.quantity)}
+                        className="py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold rounded-lg transition active:scale-95 cursor-pointer disabled:opacity-50"
+                      >
+                        Bán Hết (+{estPrice * item.quantity}🪙)
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: CHỢ P2P (MUA CỦA NGƯỜI CHƠI KHÁC) */}
       {activeTab === 'p2p_market' && (
         <div>
           {activeP2PListings.length === 0 ? (
@@ -221,7 +321,7 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
                   <button
                     disabled={loading}
                     onClick={() => handleBuyP2P(listing.id)}
-                    className="mt-4 w-full py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5"
+                    className="mt-4 w-full py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     <CheckCircle2 className="w-4 h-4" /> Mua Ngay
                   </button>
@@ -232,7 +332,7 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
         </div>
       )}
 
-      {/* TAB 3: GIAN HÀNG CỦA TÔI */}
+      {/* TAB 4: GIAN HÀNG CỦA TÔI */}
       {activeTab === 'my_listings' && (
         <div>
           {myListings.length === 0 ? (
@@ -263,7 +363,7 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
                   <button
                     disabled={loading}
                     onClick={() => handleCancelListing(listing.id)}
-                    className="mt-4 w-full py-2 bg-slate-800 hover:bg-red-950/60 hover:text-red-400 hover:border-red-800 border border-slate-700 text-slate-300 font-bold text-xs rounded-xl transition"
+                    className="mt-4 w-full py-2 bg-slate-800 hover:bg-red-950/60 hover:text-red-400 hover:border-red-800 border border-slate-700 text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer disabled:opacity-50"
                   >
                     Hủy Tin & Thu Hồi Đồ
                   </button>
@@ -274,7 +374,7 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
         </div>
       )}
 
-      {/* Modal Đăng Bán Vật Phẩm */}
+      {/* Modal Đăng Bán Vật Phẩm P2P */}
       {showSellModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
@@ -284,14 +384,13 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
               </h3>
               <button
                 onClick={() => setShowSellModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="mt-4 space-y-4">
-              {/* Chọn vật phẩm từ túi đồ */}
               <div>
                 <label className="text-xs text-slate-400 block mb-1.5 font-medium">
                   1. Chọn vật phẩm từ túi đồ:
@@ -360,14 +459,14 @@ export function MarketView({ cropDefs, listings, userInventory, currentUserId }:
             <div className="mt-5 pt-3 border-t border-slate-800 flex justify-end gap-2">
               <button
                 onClick={() => setShowSellModal(false)}
-                className="px-3.5 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs"
+                className="px-3.5 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs cursor-pointer"
               >
                 Hủy
               </button>
               <button
                 disabled={!selectedSellItem || loading}
-                onClick={handleConfirmSell}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs rounded-lg active:scale-95 transition"
+                onClick={handleConfirmSellP2P}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs rounded-lg active:scale-95 transition cursor-pointer"
               >
                 {loading ? 'Đang niêm yết...' : 'Xác Nhận Đăng Bán'}
               </button>

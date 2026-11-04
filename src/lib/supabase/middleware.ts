@@ -29,12 +29,19 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Quan trọng: getUser() gửi request xác thực an toàn lên Supabase Auth Server (tránh giả mạo JWT cookie client-side)
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const path = request.nextUrl.pathname;
+
+  // BỎ QUA kiểm tra API/auth nếu là request tài nguyên hoặc static
+  if (path.startsWith('/_next') || path.startsWith('/assets') || path.startsWith('/favicon.ico')) {
+    return supabaseResponse;
+  }
+
+  // Lấy session nhanh từ cookie local để tránh nghẽn mạng roundtrip
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const user = session?.user;
 
   // 1. Kiểm tra luồng truy cập /play (Người chơi)
   if (path.startsWith('/play')) {
@@ -55,7 +62,7 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Kiểm tra role từ bảng profiles
+    // Role check
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -63,7 +70,6 @@ export async function updateSession(request: NextRequest) {
       .single();
 
     if (!profile || profile.role !== 'admin') {
-      // Không có quyền admin -> Đá về trang chơi game /play kèm thông báo từ chối
       const playUrl = request.nextUrl.clone();
       playUrl.pathname = '/play';
       playUrl.searchParams.set('error', 'unauthorized_admin');

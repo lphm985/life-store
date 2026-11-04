@@ -79,7 +79,89 @@ export async function buySeedFromShop(cropId: CropDef['id'], quantity: number = 
 }
 
 /**
- * 2. Đăng Bán Vật Phẩm lên Chợ P2P (Marketplace Listing)
+ * 2. BÁN VẬT PHẨM CHO CỬA HÀNG HỆ THỐNG (SELL TO NPC SHOP)
+ */
+export async function sellItemToNpcShop(itemId: string, quantityToSell: number = 1) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) throw new Error('Unauthorized');
+  if (quantityToSell <= 0) return { success: false, error: 'Số lượng bán không hợp lệ!' };
+
+  // 1. Kiểm tra vật phẩm trong túi người chơi
+  const { data: inventoryItem } = await supabase
+    .from('inventory')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('item_id', itemId)
+    .single();
+
+  if (!inventoryItem || inventoryItem.quantity < quantityToSell) {
+    return { success: false, error: 'Bạn không đủ số lượng vật phẩm này để bán!' };
+  }
+
+  // 2. Tính giá bán theo định nghĩa
+  let pricePerUnit = 10; // Giá sàn mặc định nếu là đồ rơi tự do
+
+  if (inventoryItem.item_id.startsWith('crop_')) {
+    const cropId = inventoryItem.item_id.replace('crop_', '');
+    const { data: cropDef } = await supabase
+      .from('crop_definitions')
+      .select('sell_price')
+      .eq('id', cropId as any)
+      .single();
+    if (cropDef) pricePerUnit = cropDef.sell_price;
+  } else if (inventoryItem.item_id.startsWith('seed_')) {
+    const cropId = inventoryItem.item_id.replace('seed_', '');
+    const { data: cropDef } = await supabase
+      .from('crop_definitions')
+      .select('buy_price')
+      .eq('id', cropId as any)
+      .single();
+    if (cropDef) pricePerUnit = Math.floor(cropDef.buy_price * 0.5); // Bán lại hạt giống được 50% giá mua
+  } else if (inventoryItem.category === 'herb') {
+    pricePerUnit = 25; // Thảo dược bán shop NPC
+  } else if (inventoryItem.category === 'processed_food') {
+    pricePerUnit = 40; // Thức ăn đã chế biến
+  } else if (inventoryItem.category === 'potion') {
+    pricePerUnit = 60; // Dược phẩm cao cấp
+  }
+
+  const totalGoldEarned = pricePerUnit * quantityToSell;
+
+  // 3. Trừ đồ trong kho
+  if (inventoryItem.quantity === quantityToSell) {
+    await supabase.from('inventory').delete().eq('id', inventoryItem.id);
+  } else {
+    await supabase
+      .from('inventory')
+      .update({ quantity: inventoryItem.quantity - quantityToSell })
+      .eq('id', inventoryItem.id);
+  }
+
+  // 4. Cộng Vàng cho người chơi
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('gold')
+    .eq('id', user.id)
+    .single();
+
+  if (profile) {
+    await supabase
+      .from('profiles')
+      .update({ gold: profile.gold + totalGoldEarned })
+      .eq('id', user.id);
+  }
+
+  revalidatePath('/play');
+  return {
+    success: true,
+    message: `Đã bán ${quantityToSell}x ${inventoryItem.item_name} và nhận được +${totalGoldEarned} Vàng! 🪙`,
+  };
+}
+
+/**
+ * 3. Đăng Bán Vật Phẩm lên Chợ P2P (Marketplace Listing)
  */
 export async function createMarketListing(itemId: string, quantityToSell: number, pricePerUnit: number) {
   const supabase = await createClient();
@@ -140,7 +222,7 @@ export async function createMarketListing(itemId: string, quantityToSell: number
 }
 
 /**
- * 3. Hủy Tin Đăng Bán Trên Chợ P2P & Nhận Lại Đồ
+ * 4. Hủy Tin Đăng Bán Trên Chợ P2P & Nhận Lại Đồ
  */
 export async function cancelMarketListing(listingId: string) {
   const supabase = await createClient();
@@ -194,7 +276,7 @@ export async function cancelMarketListing(listingId: string) {
 }
 
 /**
- * 4. Mua Vật Phẩm Từ Chợ P2P (Gọi hàm bảo mật RPC Postgres để tránh trùng lặp)
+ * 5. Mua Vật Phẩm Từ Chợ P2P
  */
 export async function buyFromMarketplace(listingId: string) {
   const supabase = await createClient();
@@ -202,7 +284,6 @@ export async function buyFromMarketplace(listingId: string) {
 
   if (!user) throw new Error('Unauthorized');
 
-  // Gọi trực tiếp RPC PostgreSQL có tính năng SELECT FOR UPDATE và Transaction
   const { data, error } = await supabase.rpc('buy_marketplace_item', {
     listing_id: listingId,
   });

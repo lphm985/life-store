@@ -11,9 +11,8 @@ function LoginForm() {
   const redirectedFrom = searchParams.get('redirectedFrom') || '/play';
 
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -24,31 +23,53 @@ function LoginForm() {
     setLoading(true);
     setErrorMsg('');
 
+    const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (!cleanUsername || cleanUsername.length < 3) {
+      setErrorMsg('Tên tài khoản tối thiểu 3 ký tự (chỉ gồm chữ thường, số, dấu gạch dưới)!');
+      setLoading(false);
+      return;
+    }
+
+    // Biến username thành email ảo ngầm phía sau để Supabase Auth xác thực an toàn
+    const internalEmail = `${cleanUsername}@lifestore.game`;
+
     try {
       if (isRegister) {
-        // Đăng ký tài khoản
+        // Đăng ký tài khoản bằng username + password
         const { error } = await supabase.auth.signUp({
-          email,
+          email: internalEmail,
           password,
           options: {
             data: {
-              username: username.trim() || email.split('@')[0],
-              role: 'player', // Mặc định role player
+              username: cleanUsername,
+              role: 'player',
             },
           },
         });
 
         if (error) throw error;
-        alert('Đăng ký thành công! Vui lòng kiểm tra email hoặc đăng nhập.');
-        setIsRegister(false);
-      } else {
-        // Đăng nhập
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
+        alert('Tạo tài khoản thành công! Đang tự động đăng nhập...');
+
+        // Tự động đăng nhập luôn sau khi đăng ký
+        const { error: loginErr } = await supabase.auth.signInWithPassword({
+          email: internalEmail,
           password,
         });
 
-        if (error) throw error;
+        if (loginErr) throw loginErr;
+        router.push(redirectedFrom);
+        router.refresh();
+      } else {
+        // Đăng nhập bằng username + password
+        const { error } = await supabase.auth.signInWithPassword({
+          email: internalEmail,
+          password,
+        });
+
+        if (error) {
+          throw new Error('Sai tên tài khoản hoặc mật khẩu!');
+        }
+
         router.push(redirectedFrom);
         router.refresh();
       }
@@ -67,7 +88,7 @@ function LoginForm() {
         </div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Life Store RPG</h1>
         <p className="text-xs text-slate-400 mt-1">
-          {isRegister ? 'Tạo nông trại và bắt đầu hành trình RPG' : 'Đăng nhập để vào thế giới nông trại'}
+          {isRegister ? 'Tạo tài khoản người chơi mới' : 'Đăng nhập vào nông trại của bạn'}
         </p>
       </div>
 
@@ -78,34 +99,22 @@ function LoginForm() {
       )}
 
       <form onSubmit={handleAuth} className="space-y-4">
-        {isRegister && (
-          <div>
-            <label className="text-xs text-slate-400 block mb-1">Tên Người Chơi:</label>
-            <input
-              type="text"
-              required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Hiệp Sĩ Nông Dân"
-              className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-        )}
-
         <div>
-          <label className="text-xs text-slate-400 block mb-1">Email:</label>
+          <label className="text-xs text-slate-400 block mb-1">Tên Tài Khoản (Username):</label>
           <input
-            type="email"
+            type="text"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="player@example.com"
-            className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            autoCapitalize="none"
+            autoCorrect="off"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="hiepsi_nongdan"
+            className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium"
           />
         </div>
 
         <div>
-          <label className="text-xs text-slate-400 block mb-1">Mật khẩu:</label>
+          <label className="text-xs text-slate-400 block mb-1">Mật Khẩu:</label>
           <input
             type="password"
             required
@@ -122,7 +131,7 @@ function LoginForm() {
           className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg active:scale-95 transition flex items-center justify-center gap-1.5"
         >
           {isRegister ? <UserPlus className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-          {loading ? 'Đang xử lý...' : isRegister ? 'Đăng Ký Tài Khoản' : 'Đăng Nhập Ngay'}
+          {loading ? 'Đang xử lý...' : isRegister ? 'Tạo Tài Khoản Ngay' : 'Đăng Nhập Vào Game'}
         </button>
       </form>
 
@@ -134,7 +143,7 @@ function LoginForm() {
           }}
           className="text-xs text-emerald-400 hover:underline"
         >
-          {isRegister ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký miễn phí'}
+          {isRegister ? 'Đã có tài khoản? Đăng nhập ngay' : 'Chưa có tài khoản? Tạo tài khoản mới'}
         </button>
       </div>
     </div>

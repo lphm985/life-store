@@ -48,7 +48,7 @@ export function MinionCard({ minion, missions, onDispatchClick, onPotionClick }:
       if (!res.success) {
         alert(res.error);
       } else {
-        const dropNames = res.drops.map((d) => `${d.icon} ${d.itemName} x${d.quantity}`).join(', ');
+        const dropNames = (res.drops || []).map((d) => `${d.icon} ${d.itemName} x${d.quantity}`).join(', ');
         alert(
           `🎉 Thám hiểm thành công!\n+${res.goldReward} Vàng | +${res.expReward} EXP\nMất máu: -${res.damageTaken} HP\nVật phẩm: ${dropNames || 'Không có'}`
         );
